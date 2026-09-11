@@ -1,35 +1,35 @@
 export type CloudShape =
   | 'cloud'
-  | 'circle'
-  | 'heart'
-  | 'star'
-  | 'speech_bubble'
-  | 'trophy'
-  | 'lightbulb'
-  | 'rectangle'
-  | 'diamond'
-  | 'hexagon';
+| 'circle'
+| 'heart'
+| 'star'
+| 'speech_bubble'
+| 'trophy'
+| 'lightbulb'
+| 'rectangle'
+| 'diamond'
+| 'hexagon';
 
 export type PaletteId =
   | 'cyberpunk'
-  | 'sunset'
-  | 'emerald'
-  | 'ocean'
-  | 'pastel'
-  | 'royalty'
-  | 'monochrome'
-  | 'candy'
-  | 'warm_autumn'
-  | 'custom';
+| 'sunset'
+| 'emerald'
+| 'ocean'
+| 'pastel'
+| 'royalty'
+| 'monochrome'
+| 'candy'
+| 'warm_autumn'
+| 'custom';
 
 export type FontFamilyId =
   | 'montserrat'
-  | 'playfair'
-  | 'inter'
-  | 'fredoka'
-  | 'cinzel'
-  | 'pacifico'
-  | 'spacemono';
+| 'playfair'
+| 'inter'
+| 'fredoka'
+| 'cinzel'
+| 'pacifico'
+| 'spacemono';
 
 export type RotationMode = 'horizontal' | 'mixed90' | 'diagonal45' | 'free';
 
@@ -60,7 +60,7 @@ export interface PositionedWord {
   y: number;
   size: number;
   rotate: number; // degrees
-  color: string;
+color: string;
   width: number;
   height: number;
 }
@@ -74,6 +74,7 @@ export interface SessionData {
   updatedAt: number;
   participantCount: number;
   recentLogs: Array<{ word: string; time: number; by?: string }>;
+  logoUrl?: string;
 }
 
 export type ExportResolution = 'standard' | 'hd' | '4k' | 'print300';
