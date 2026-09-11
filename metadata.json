@@ -1,0 +1,6 @@
+{
+  "name": "Generador de Nube de Palabras",
+  "description": "Generador colaborativo de nubes de palabras con formulario para participantes en vivo, múltiples modelos y paletas, enlace descargable, compartir en redes sociales y exportación en alta resolución.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
