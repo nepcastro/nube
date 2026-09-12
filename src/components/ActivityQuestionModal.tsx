@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   HelpCircle,
   Sparkles,
@@ -11,6 +11,9 @@ import {
   BookOpen,
   MessageSquare,
   Flame,
+  ImageIcon,
+  Trash2,
+  UploadCloud,
 } from 'lucide-react';
 
 interface ActivityTemplate {
@@ -101,6 +104,9 @@ interface ActivityQuestionModalProps {
   onClose: () => void;
   onSave: (title: string, promptQuestion: string, resetWords: boolean) => Promise<void> | void;
   totalWordsInCloud: number;
+  currentLogoUrl?: string;
+  onUploadLogo?: (file: File) => Promise<void>;
+  onRemoveLogo?: () => Promise<void>;
 }
 
 export const ActivityQuestionModal: React.FC<ActivityQuestionModalProps> = ({
@@ -110,12 +116,18 @@ export const ActivityQuestionModal: React.FC<ActivityQuestionModalProps> = ({
   onClose,
   onSave,
   totalWordsInCloud,
+  currentLogoUrl,
+  onUploadLogo,
+  onRemoveLogo,
 }) => {
   const [title, setTitle] = useState(currentTitle);
   const [promptQuestion, setPromptQuestion] = useState(currentPrompt);
   const [resetWords, setResetWords] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<number>(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
+  const logoFileInputRef = useRef<HTMLInputElement>(null);
 
   // Sync state when modal is opened
   React.useEffect(() => {
@@ -149,6 +161,44 @@ export const ActivityQuestionModal: React.FC<ActivityQuestionModalProps> = ({
     setPromptQuestion(templateQuestion);
     if (!title.trim() || title === currentTitle) {
       setTitle(defaultTitle);
+    }
+  };
+
+  const handleLogoFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !onUploadLogo) return;
+
+    if (!file.type.startsWith('image/')) {
+      setLogoError('El archivo debe ser una imagen (PNG, JPG o SVG).');
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      setLogoError('La imagen es demasiado grande (máx. 3MB).');
+      return;
+    }
+
+    setLogoError(null);
+    setIsUploadingLogo(true);
+    try {
+      await onUploadLogo(file);
+    } catch (err) {
+      setLogoError('No se pudo subir el logo. Intenta de nuevo.');
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
+
+  const handleRemoveLogo = async () => {
+    if (!onRemoveLogo) return;
+    setLogoError(null);
+    setIsUploadingLogo(true);
+    try {
+      await onRemoveLogo();
+    } catch (err) {
+      setLogoError('No se pudo quitar el logo. Intenta de nuevo.');
+    } finally {
+      setIsUploadingLogo(false);
     }
   };
 
@@ -240,6 +290,77 @@ export const ActivityQuestionModal: React.FC<ActivityQuestionModalProps> = ({
               className="w-full px-3.5 py-2 bg-slate-950/90 border border-slate-700 focus:border-indigo-500 rounded-xl text-xs sm:text-sm text-white placeholder-slate-500 outline-none transition-all"
             />
           </div>
+
+          {/* Client / Brand Logo for the Presentation Landing Screen */}
+          {(onUploadLogo || onRemoveLogo) && (
+            <div className="space-y-2 pt-2 border-t border-slate-800">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center gap-1.5">
+                <ImageIcon className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Logo del Cliente (Pantalla de Bienvenida)</span>
+              </label>
+              <p className="text-[11px] text-slate-400">
+                Se mostrará en una portada de marca antes de revelar la nube en la pantalla de proyección.
+              </p>
+
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                <div className="w-16 h-16 rounded-lg bg-white/5 border border-slate-700 flex items-center justify-center overflow-hidden shrink-0">
+                  {currentLogoUrl ? (
+                    <img
+                      src={currentLogoUrl}
+                      alt="Logo actual"
+                      className="w-full h-full object-contain"
+                    />
+                  ) : (
+                    <ImageIcon className="w-5 h-5 text-slate-600" />
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-1.5 flex-1">
+                  <input
+                    ref={logoFileInputRef}
+                    id="activity-logo-file-input"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoFileSelected}
+                    className="hidden"
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      id="upload-logo-btn"
+                      type="button"
+                      disabled={isUploadingLogo}
+                      onClick={() => logoFileInputRef.current?.click()}
+                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-white text-[11px] font-semibold flex items-center gap-1.5 transition-colors"
+                    >
+                      {isUploadingLogo ? (
+                        <RotateCcw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <UploadCloud className="w-3.5 h-3.5" />
+                      )}
+                      <span>{currentLogoUrl ? 'Cambiar logo' : 'Subir logo'}</span>
+                    </button>
+                    {currentLogoUrl && (
+                      <button
+                        id="remove-logo-btn"
+                        type="button"
+                        disabled={isUploadingLogo}
+                        onClick={handleRemoveLogo}
+                        className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-900/60 disabled:opacity-50 text-slate-300 hover:text-rose-300 text-[11px] font-semibold flex items-center gap-1.5 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Quitar</span>
+                      </button>
+                    )}
+                  </div>
+                  {logoError ? (
+                    <span className="text-[11px] text-rose-400">{logoError}</span>
+                  ) : (
+                    <span className="text-[11px] text-slate-500">PNG, JPG o SVG · máx. 3MB</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Activity Templates Bank */}
           <div className="space-y-2.5 pt-2 border-t border-slate-800">
