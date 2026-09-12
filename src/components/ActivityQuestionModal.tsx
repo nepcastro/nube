@@ -296,10 +296,10 @@ export const ActivityQuestionModal: React.FC<ActivityQuestionModalProps> = ({
             <div className="space-y-2 pt-2 border-t border-slate-800">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center gap-1.5">
                 <ImageIcon className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Logo del Cliente (Pantalla de Bienvenida)</span>
+                <span>Logo del Cliente (Portada de Bienvenida)</span>
               </label>
               <p className="text-[11px] text-slate-400">
-                Se mostrará en una portada de marca antes de revelar la nube en la pantalla de proyección.
+                Se mostrará junto al logo de Gen Consultores en la portada de bienvenida, tanto en la pantalla de proyección como en el celular de cada participante antes de escribir su palabra.
               </p>
 
               <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-950/60 border border-slate-800">
