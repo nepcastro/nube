@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { CloudConfig, PositionedWord, SessionData } from '../types';
 import { WordCloudCanvas } from './WordCloudCanvas';
+import { BrandLockup } from './BrandLockup';
 import {
   Minimize2,
   QrCode,
@@ -107,13 +108,7 @@ export const PresentationView: React.FC<PresentationViewProps> = ({
           <Minimize2 className="w-4 h-4" />
         </button>
 
-        <div className="w-36 h-36 sm:w-52 sm:h-52 rounded-3xl bg-white/5 border border-slate-700/60 flex items-center justify-center overflow-hidden shadow-2xl mb-8">
-          {session.logoUrl ? (
-            <img src={session.logoUrl} alt="Logo del cliente" className="w-full h-full object-contain p-4" />
-          ) : (
-            <Sparkles className="w-14 h-14 sm:w-16 sm:h-16 text-indigo-400" />
-          )}
-        </div>
+        <BrandLockup clientLogoUrl={session.logoUrl} size="lg" className="mb-8" />
 
         <p className="text-xs sm:text-sm uppercase tracking-[0.2em] text-indigo-400 font-bold mb-3">
           Presentación en Vivo
