@@ -11,6 +11,7 @@ import {
   Check,
   X,
   EyeOff,
+  Eye,
   Edit3,
   HelpCircle,
   ShieldCheck,
@@ -37,6 +38,7 @@ export const PresentationView: React.FC<PresentationViewProps> = ({
   const [showQrCard, setShowQrCard] = useState<boolean>(true);
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
   const [showUrlConfig, setShowUrlConfig] = useState<boolean>(false);
+  const [showLanding, setShowLanding] = useState<boolean>(true);
 
   const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
   const isDevHost = currentUrl.includes('ais-dev-');
@@ -89,6 +91,49 @@ export const PresentationView: React.FC<PresentationViewProps> = ({
   };
 
   const totalVotes = (Object.values(session.words) as number[]).reduce((a, b) => a + b, 0);
+
+  if (showLanding) {
+    return (
+      <div
+        id="presentation-landing-screen"
+        className="fixed inset-0 z-50 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 flex flex-col items-center justify-center p-6 text-center select-none animate-fadeIn"
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          title="Salir (Esc)"
+          className="absolute top-4 right-4 sm:top-6 sm:right-6 p-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-all"
+        >
+          <Minimize2 className="w-4 h-4" />
+        </button>
+
+        <div className="w-36 h-36 sm:w-52 sm:h-52 rounded-3xl bg-white/5 border border-slate-700/60 flex items-center justify-center overflow-hidden shadow-2xl mb-8">
+          {session.logoUrl ? (
+            <img src={session.logoUrl} alt="Logo del cliente" className="w-full h-full object-contain p-4" />
+          ) : (
+            <Sparkles className="w-14 h-14 sm:w-16 sm:h-16 text-indigo-400" />
+          )}
+        </div>
+
+        <p className="text-xs sm:text-sm uppercase tracking-[0.2em] text-indigo-400 font-bold mb-3">
+          Presentación en Vivo
+        </p>
+        <h1 className="text-2xl sm:text-4xl font-extrabold text-white max-w-3xl leading-tight mb-10">
+          {session.title}
+        </h1>
+
+        <button
+          id="landing-ver-nube-btn"
+          type="button"
+          onClick={() => setShowLanding(false)}
+          className="px-8 py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm sm:text-base font-bold shadow-2xl shadow-indigo-600/30 transition-all active:scale-95 flex items-center gap-2.5"
+        >
+          <Eye className="w-5 h-5" />
+          <span>Ver Nube</span>
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div
