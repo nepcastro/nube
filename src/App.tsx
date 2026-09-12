@@ -9,6 +9,7 @@ import { ExportShareModal } from './components/ExportShareModal';
 import { PresentationView } from './components/PresentationView';
 import { ParticipantMobileView } from './components/ParticipantMobileView';
 import { ActivityQuestionModal } from './components/ActivityQuestionModal';
+import { AdminPinGate } from './components/AdminPinGate';
 import QRCode from 'qrcode';
 import {
   CloudRain,
@@ -30,7 +31,10 @@ import {
   Globe,
   Settings,
   Info,
+  RotateCcw,
 } from 'lucide-react';
+
+const ADMIN_PIN_STORAGE_KEY = 'nube_moderator_pin';
 
 const DEFAULT_CONFIG: CloudConfig = {
   shape: 'cloud',
@@ -106,6 +110,11 @@ export default function App() {
   const [qrInlineDataUrl, setQrInlineDataUrl] = useState<string>('');
   const [copiedInlineLink, setCopiedInlineLink] = useState<boolean>(false);
   const [showInlineUrlSettings, setShowInlineUrlSettings] = useState<boolean>(false);
+  const [checkingAuth, setCheckingAuth] = useState<boolean>(true);
+  const [isPinVerified, setIsPinVerified] = useState<boolean>(false);
+  const [adminPin, setAdminPin] = useState<string>('');
+  const [isVerifyingPin, setIsVerifyingPin] = useState<boolean>(false);
+  const [pinError, setPinError] = useState<string | null>(null);
 
   const currentWindowUrl = typeof window !== 'undefined' ? window.location.href : '';
   const isDevHost = currentWindowUrl.includes('ais-dev-');
@@ -156,10 +165,71 @@ export default function App() {
     const mode = params.get('mode');
 
     setSessionId(sid);
+
+    // Anonymous participant access never needs the moderator PIN.
     if (mode === 'participant') {
       setIsParticipantMode(true);
+      setCheckingAuth(false);
+      return;
     }
+
+    // Studio/moderator access: verify a cached PIN, if any, before rendering the UI.
+    const cachedPin = window.localStorage.getItem(ADMIN_PIN_STORAGE_KEY);
+    if (!cachedPin) {
+      setCheckingAuth(false);
+      return;
+    }
+
+    fetch('/api/auth/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: cachedPin }),
+    })
+      .then((res) => res.json().catch(() => ({})))
+      .then((data) => {
+        if (data?.success) {
+          setAdminPin(cachedPin);
+          setIsPinVerified(true);
+        } else {
+          window.localStorage.removeItem(ADMIN_PIN_STORAGE_KEY);
+        }
+      })
+      .catch(() => {
+        // Offline moment: keep the cached PIN optimistically — the server
+        // still enforces it on every mutating request regardless.
+        setAdminPin(cachedPin);
+        setIsPinVerified(true);
+      })
+      .finally(() => setCheckingAuth(false));
   }, []);
+
+  const adminHeaders = useCallback((): Record<string, string> => {
+    return adminPin ? { 'X-Admin-Pin': adminPin } : {};
+  }, [adminPin]);
+
+  const handlePinSubmit = async (pin: string) => {
+    setIsVerifyingPin(true);
+    setPinError(null);
+    try {
+      const res = await fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.success) {
+        window.localStorage.setItem(ADMIN_PIN_STORAGE_KEY, pin);
+        setAdminPin(pin);
+        setIsPinVerified(true);
+      } else {
+        setPinError('PIN incorrecto. Verifica con el organizador del evento.');
+      }
+    } catch {
+      setPinError('No se pudo verificar el PIN. Revisa tu conexión e intenta de nuevo.');
+    } finally {
+      setIsVerifyingPin(false);
+    }
+  };
 
   // Fetch session data from server API
   const fetchSession = useCallback(async () => {
@@ -270,7 +340,7 @@ export default function App() {
     try {
       const res = await fetch(`/api/sessions/${sessionId}/words/${encodeURIComponent(word)}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
         body: JSON.stringify({ count }),
       });
       if (res.ok) {
@@ -295,6 +365,7 @@ export default function App() {
     try {
       const res = await fetch(`/api/sessions/${sessionId}/words/${encodeURIComponent(word)}`, {
         method: 'DELETE',
+        headers: { ...adminHeaders() },
       });
       if (res.ok) {
         const data = await res.json();
@@ -325,7 +396,10 @@ export default function App() {
   // Reset all words
   const handleResetWords = async () => {
     try {
-      await fetch(`/api/sessions/${sessionId}/reset`, { method: 'POST' });
+      await fetch(`/api/sessions/${sessionId}/reset`, {
+        method: 'POST',
+        headers: { ...adminHeaders() },
+      });
     } catch {
       // ignore
     }
@@ -355,7 +429,7 @@ export default function App() {
     try {
       const res = await fetch(`/api/sessions/${sessionId}/settings`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
         body: JSON.stringify({
           title: cleanTitle,
           promptQuestion: cleanPrompt,
@@ -403,6 +477,44 @@ export default function App() {
     await handleSaveActivitySettings(editTitleInput, editPromptInput, false);
   };
 
+  // Upload the client/brand logo shown on the presentation landing screen
+  const handleUploadLogo = async (file: File) => {
+    const dataUrl: string = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+
+    const res = await fetch(`/api/sessions/${sessionId}/logo`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...adminHeaders() },
+      body: JSON.stringify({ dataUrl }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data?.session) {
+      setSession(data.session);
+      showToast('¡Logo actualizado con éxito!');
+    } else {
+      throw new Error(data?.error || 'No se pudo subir el logo');
+    }
+  };
+
+  // Remove the current client/brand logo
+  const handleRemoveLogo = async () => {
+    const res = await fetch(`/api/sessions/${sessionId}/logo`, {
+      method: 'DELETE',
+      headers: { ...adminHeaders() },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data?.session) {
+      setSession(data.session);
+      showToast('Logo eliminado.');
+    } else {
+      throw new Error(data?.error || 'No se pudo quitar el logo');
+    }
+  };
+
   const topExistingWords = (Object.entries(session.words) as [string, number][])
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
@@ -418,6 +530,22 @@ export default function App() {
         onSwitchToStudio={() => setIsParticipantMode(false)}
         isLoading={isLoading}
       />
+    );
+  }
+
+  // Brief loading state while we check for a cached moderator PIN
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-slate-950 text-slate-400">
+        <RotateCcw className="w-6 h-6 animate-spin" />
+      </div>
+    );
+  }
+
+  // Studio/moderator access requires the event PIN; participants are unaffected
+  if (!isPinVerified) {
+    return (
+      <AdminPinGate onSubmit={handlePinSubmit} isVerifying={isVerifyingPin} error={pinError} />
     );
   }
 
@@ -977,6 +1105,9 @@ export default function App() {
         onClose={() => setShowQuestionModal(false)}
         onSave={handleSaveActivitySettings}
         totalWordsInCloud={Object.keys(session.words).length}
+        currentLogoUrl={session.logoUrl}
+        onUploadLogo={handleUploadLogo}
+        onRemoveLogo={handleRemoveLogo}
       />
     </div>
   );
