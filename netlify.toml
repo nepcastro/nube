@@ -7,3 +7,5 @@ functions = "netlify/functions"
 from = "/*"
 to = "/index.html"
 status = 200
+
+# trigger redeploy for env var
