@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import confetti from 'canvas-confetti';
 import { SessionData } from '../types';
-import { Send, Sparkles, User, ThumbsUp, ArrowLeft, ShieldCheck } from 'lucide-react';
+import { Send, Sparkles, User, ThumbsUp, ArrowLeft, ShieldCheck, ArrowRight } from 'lucide-react';
+import { BrandLockup } from './BrandLockup';
 
 interface ParticipantMobileViewProps {
   session: SessionData;
@@ -21,6 +22,7 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
   const [wordInput, setWordInput] = useState('');
   const [name, setName] = useState('');
   const [submittedMessage, setSubmittedMessage] = useState<string | null>(null);
+  const [showLanding, setShowLanding] = useState<boolean>(true);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,6 +53,53 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
   const topWords = (Object.entries(session.words) as [string, number][])
     .sort((a, b) => b[1] - a[1])
     .slice(0, 15);
+
+  if (showLanding) {
+    return (
+      <div
+        id="participant-landing-screen"
+        className="min-h-screen w-full bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 flex flex-col items-center justify-center p-6 text-center select-none animate-fadeIn"
+      >
+        <BrandLockup clientLogoUrl={session.logoUrl} size="lg" className="mb-7" />
+
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/60 border border-emerald-500/40 text-emerald-400 text-[11px] font-semibold mb-4">
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Acceso libre · Sin registro ni cuentas</span>
+        </div>
+
+        <p className="text-xs sm:text-sm uppercase tracking-[0.2em] text-indigo-400 font-bold mb-3">
+          Taller en Vivo
+        </p>
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-white max-w-md leading-tight mb-3">
+          {session.title}
+        </h1>
+        {session.promptQuestion && (
+          <p className="text-sm sm:text-base text-slate-300 max-w-sm mb-9 leading-snug">
+            {session.promptQuestion}
+          </p>
+        )}
+
+        <button
+          id="participant-landing-continue-btn"
+          type="button"
+          onClick={() => setShowLanding(false)}
+          className="px-7 py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm sm:text-base font-bold shadow-2xl shadow-indigo-600/30 transition-all active:scale-95 flex items-center gap-2.5"
+        >
+          <span>Registrar mi palabra</span>
+          <ArrowRight className="w-5 h-5" />
+        </button>
+
+        <button
+          type="button"
+          onClick={onSwitchToStudio}
+          className="mt-8 text-xs text-slate-500 hover:text-indigo-400 flex items-center gap-1 font-semibold transition-colors"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          <span>Ver Estudio / Nube</span>
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div
