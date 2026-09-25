@@ -375,7 +375,8 @@ export function renderWordCloudToCanvas(
   words: PositionedWord[],
   config: CloudConfig,
   renderWidth: number,
-  renderHeight: number
+  renderHeight: number,
+  wordsYOffset: number = 0
 ) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -398,7 +399,7 @@ export function renderWordCloudToCanvas(
 
   for (const word of words) {
     ctx.save();
-    ctx.translate(word.x, word.y);
+    ctx.translate(word.x, word.y + wordsYOffset);
     if (word.rotate !== 0) {
       ctx.rotate((word.rotate * Math.PI) / 180);
     }
@@ -418,13 +419,283 @@ export function renderWordCloudToCanvas(
   }
 }
 
-// Generate vector SVG string for lossless high-resolution export & print
-export function generateSvgString(
+// ---------------------------------------------------------------------------
+// Export branding header: draws the session question + Gen/client logos atop
+// exported files, so a downloaded PNG/SVG is self-explanatory on its own.
+// ---------------------------------------------------------------------------
+
+export interface ExportHeaderSource {
+  title: string;
+  promptQuestion?: string;
+  genLogoUrl: string;
+  clientLogoUrl?: string;
+}
+
+export interface ResolvedExportHeader {
+  title: string;
+  promptQuestion?: string;
+  genLogoDataUri: string;
+  clientLogoDataUri?: string;
+}
+
+// Reserve a header band proportional to canvas height, with sane min/max.
+export function computeExportHeaderHeight(canvasHeight: number): number {
+  return Math.max(90, Math.min(200, Math.round(canvasHeight * 0.13)));
+}
+
+// Fetches any same-origin (or data:) image URL and inlines it as a data URI,
+// so exported files stay self-contained and portable.
+async function urlToDataUri(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('No se pudo leer la imagen'));
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
+function loadImageElement(dataUri: string): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = dataUri;
+  });
+}
+
+// Resolves logos to inline data URIs ahead of rendering. Returns null only
+// if the Gen logo (always present) can't be loaded — in that case callers
+// should fall back to exporting without a header rather than failing.
+export async function resolveExportHeader(source: ExportHeaderSource): Promise<ResolvedExportHeader | null> {
+  const genLogoDataUri = await urlToDataUri(source.genLogoUrl);
+  if (!genLogoDataUri) return null;
+
+  const clientLogoDataUri = source.clientLogoUrl
+    ? (await urlToDataUri(source.clientLogoUrl)) || undefined
+    : undefined;
+
+  return {
+    title: source.title,
+    promptQuestion: source.promptQuestion?.trim() || undefined,
+    genLogoDataUri,
+    clientLogoDataUri,
+  };
+}
+
+function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function truncateToWidth(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let truncated = text;
+  while (truncated.length > 1 && ctx.measureText(`${truncated}…`).width > maxWidth) {
+    truncated = truncated.slice(0, -1);
+  }
+  return `${truncated}…`;
+}
+
+// Draws the branding header (logos + question) onto an already-sized canvas.
+export async function drawExportHeaderOnCanvas(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  headerHeight: number,
+  header: ResolvedExportHeader
+): Promise<void> {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, headerHeight);
+  ctx.lineTo(width, headerHeight);
+  ctx.stroke();
+  ctx.restore();
+
+  const padding = headerHeight * 0.18;
+  const logoSize = headerHeight - padding * 2;
+
+  const [genImg, clientImg] = await Promise.all([
+    loadImageElement(header.genLogoDataUri),
+    header.clientLogoDataUri ? loadImageElement(header.clientLogoDataUri) : Promise.resolve(null),
+  ]);
+
+  let cursorX = padding;
+
+  const drawLogoBox = (img: HTMLImageElement | null) => {
+    if (!img) return;
+    ctx.save();
+    ctx.fillStyle = '#ffffff';
+    roundRectPath(ctx, cursorX, padding, logoSize, logoSize, logoSize * 0.18);
+    ctx.fill();
+
+    const innerPad = logoSize * 0.14;
+    const boxSize = logoSize - innerPad * 2;
+    const naturalW = img.naturalWidth || boxSize;
+    const naturalH = img.naturalHeight || boxSize;
+    const scale = Math.min(boxSize / naturalW, boxSize / naturalH);
+    const drawW = naturalW * scale;
+    const drawH = naturalH * scale;
+    const dx = cursorX + (logoSize - drawW) / 2;
+    const dy = padding + (logoSize - drawH) / 2;
+    ctx.drawImage(img, dx, dy, drawW, drawH);
+    ctx.restore();
+    cursorX += logoSize + padding * 0.6;
+  };
+
+  drawLogoBox(genImg);
+  if (clientImg) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.font = `${Math.round(logoSize * 0.4)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('×', cursorX + logoSize * 0.22, padding + logoSize / 2);
+    ctx.restore();
+    cursorX += logoSize * 0.44;
+    drawLogoBox(clientImg);
+  }
+
+  const textX = cursorX + padding * 0.5;
+  const textMaxWidth = Math.max(40, width - textX - padding);
+
+  ctx.save();
+  ctx.textAlign = 'left';
+
+  if (header.promptQuestion) {
+    const smallSize = Math.max(11, Math.round(headerHeight * 0.13));
+    const titleSize = Math.max(15, Math.round(headerHeight * 0.23));
+
+    ctx.font = `700 ${smallSize}px system-ui, -apple-system, sans-serif`;
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(
+      truncateToWidth(ctx, header.title.toUpperCase(), textMaxWidth),
+      textX,
+      padding + logoSize * 0.34
+    );
+
+    ctx.font = `800 ${titleSize}px system-ui, -apple-system, sans-serif`;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(
+      truncateToWidth(ctx, header.promptQuestion, textMaxWidth),
+      textX,
+      padding + logoSize * 0.72
+    );
+  } else {
+    const titleSize = Math.max(15, Math.round(headerHeight * 0.25));
+    ctx.font = `800 ${titleSize}px system-ui, -apple-system, sans-serif`;
+    ctx.fillStyle = '#ffffff';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(truncateToWidth(ctx, header.title, textMaxWidth), textX, padding + logoSize / 2);
+  }
+
+  ctx.restore();
+}
+
+// Builds the SVG markup for the same branding header, using inline data URIs
+// so the exported .svg file stays self-contained.
+function buildSvgHeaderMarkup(
+  width: number,
+  headerHeight: number,
+  header: ResolvedExportHeader,
+  genSize: { w: number; h: number },
+  clientSize: { w: number; h: number } | null
+): string {
+  const padding = headerHeight * 0.18;
+  const logoSize = headerHeight - padding * 2;
+  const parts: string[] = [
+    `<line x1="0" y1="${headerHeight}" x2="${width}" y2="${headerHeight}" stroke="rgba(255,255,255,0.10)" stroke-width="1" />`,
+  ];
+
+  let cursorX = padding;
+  const escape = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  const addLogo = (dataUri: string, natural: { w: number; h: number }) => {
+    parts.push(
+      `<rect x="${cursorX}" y="${padding}" width="${logoSize}" height="${logoSize}" rx="${logoSize * 0.18}" fill="#ffffff" />`
+    );
+    const innerPad = logoSize * 0.14;
+    const boxSize = logoSize - innerPad * 2;
+    const scale = Math.min(boxSize / natural.w, boxSize / natural.h);
+    const drawW = natural.w * scale;
+    const drawH = natural.h * scale;
+    const dx = cursorX + (logoSize - drawW) / 2;
+    const dy = padding + (logoSize - drawH) / 2;
+    parts.push(
+      `<image href="${dataUri}" x="${dx}" y="${dy}" width="${drawW}" height="${drawH}" preserveAspectRatio="xMidYMid meet" />`
+    );
+    cursorX += logoSize + padding * 0.6;
+  };
+
+  addLogo(header.genLogoDataUri, genSize);
+  if (header.clientLogoDataUri && clientSize) {
+    parts.push(
+      `<text x="${cursorX + logoSize * 0.22}" y="${padding + logoSize / 2}" font-size="${Math.round(
+        logoSize * 0.4
+      )}" fill="rgba(255,255,255,0.4)" text-anchor="middle" dominant-baseline="middle">×</text>`
+    );
+    cursorX += logoSize * 0.44;
+    addLogo(header.clientLogoDataUri, clientSize);
+  }
+
+  const textX = cursorX + padding * 0.5;
+  const textMaxWidth = Math.max(40, width - textX - padding);
+  const approxCharWidth = (fontSize: number) => fontSize * 0.56;
+  const truncate = (text: string, fontSize: number) => {
+    const maxChars = Math.max(4, Math.floor(textMaxWidth / approxCharWidth(fontSize)));
+    return text.length > maxChars ? `${text.slice(0, maxChars - 1)}…` : text;
+  };
+
+  if (header.promptQuestion) {
+    const smallSize = Math.max(11, Math.round(headerHeight * 0.13));
+    const titleSize = Math.max(15, Math.round(headerHeight * 0.23));
+    parts.push(
+      `<text x="${textX}" y="${padding + logoSize * 0.34}" font-family="Inter, system-ui, sans-serif" font-weight="700" font-size="${smallSize}px" fill="rgba(255,255,255,0.6)" letter-spacing="1">${escape(
+        truncate(header.title.toUpperCase(), smallSize)
+      )}</text>`
+    );
+    parts.push(
+      `<text x="${textX}" y="${padding + logoSize * 0.72}" font-family="Inter, system-ui, sans-serif" font-weight="800" font-size="${titleSize}px" fill="#ffffff">${escape(
+        truncate(header.promptQuestion, titleSize)
+      )}</text>`
+    );
+  } else {
+    const titleSize = Math.max(15, Math.round(headerHeight * 0.25));
+    parts.push(
+      `<text x="${textX}" y="${padding + logoSize / 2}" font-family="Inter, system-ui, sans-serif" font-weight="800" font-size="${titleSize}px" fill="#ffffff" dominant-baseline="middle">${escape(
+        truncate(header.title, titleSize)
+      )}</text>`
+    );
+  }
+
+  return parts.join('\n  ');
+}
+
+// Generate vector SVG string for lossless high-resolution export & print.
+// wordsYOffset shifts the word group down to make room for an optional
+// branding header (see resolveExportHeader / buildSvgHeaderMarkup above).
+export async function generateSvgString(
   words: PositionedWord[],
   config: CloudConfig,
   width: number,
-  height: number
-): string {
+  height: number,
+  header?: ResolvedExportHeader | null,
+  wordsYOffset: number = 0
+): Promise<string> {
   const fontDef = FONTS.find((f) => f.id === config.font) || FONTS[0];
   const bgRect = !config.isTransparentBg && config.background
     ? `<rect width="${width}" height="${height}" fill="${config.background}" />`
@@ -434,8 +705,8 @@ export function generateSvgString(
     .map((word) => {
       const transform =
         word.rotate !== 0
-          ? `transform="translate(${word.x}, ${word.y}) rotate(${word.rotate})"`
-          : `transform="translate(${word.x}, ${word.y})"`;
+          ? `transform="translate(${word.x}, ${word.y + wordsYOffset}) rotate(${word.rotate})"`
+          : `transform="translate(${word.x}, ${word.y + wordsYOffset})"`;
 
       // Escape XML characters
       const escapedText = word.text
@@ -452,15 +723,43 @@ export function generateSvgString(
     })
     .join('\n');
 
+  let headerMarkup = '';
+  if (header) {
+    const headerHeight = wordsYOffset;
+    const [genSize, clientSize] = await Promise.all([
+      getDataUriSize(header.genLogoDataUri),
+      header.clientLogoDataUri ? getDataUriSize(header.clientLogoDataUri) : Promise.resolve(null),
+    ]);
+    if (genSize) {
+      headerMarkup = `<g id="export-header-group">\n  ${buildSvgHeaderMarkup(
+        width,
+        headerHeight,
+        header,
+        genSize,
+        clientSize
+      )}\n  </g>`;
+    }
+  }
+
   return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700&amp;family=Fredoka:wght@600;700&amp;family=Inter:wght@600;700&amp;family=Montserrat:wght@700;800;900&amp;family=Pacifico&amp;family=Playfair+Display:ital,wght@0,700&amp;family=Space+Mono:wght@700&amp;display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700&amp;family=Fredoka:wght@600;700&amp;family=Inter:wght@600;700;800&amp;family=Montserrat:wght@700;800;900&amp;family=Pacifico&amp;family=Playfair+Display:ital,wght@0,700&amp;family=Space+Mono:wght@700&amp;display=swap');
     text { user-select: none; }
   </style>
   ${bgRect}
+  ${headerMarkup}
   <g id="word-cloud-group">
 ${textElements}
   </g>
 </svg>`;
+}
+
+function getDataUriSize(dataUri: string): Promise<{ w: number; h: number } | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ w: img.naturalWidth || 1, h: img.naturalHeight || 1 });
+    img.onerror = () => resolve(null);
+    img.src = dataUri;
+  });
 }
