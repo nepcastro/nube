@@ -25,12 +25,10 @@ import {
   Send,
   QrCode,
   HelpCircle,
-  ShieldCheck,
   Copy,
   ExternalLink,
   Globe,
   Settings,
-  Info,
   RotateCcw,
 } from 'lucide-react';
 
@@ -117,7 +115,6 @@ export default function App() {
   const [pinError, setPinError] = useState<string | null>(null);
 
   const currentWindowUrl = typeof window !== 'undefined' ? window.location.href : '';
-  const isDevHost = currentWindowUrl.includes('ais-dev-');
   const effectiveBaseUrl = customPublicUrl.trim()
     ? customPublicUrl.trim().split('?')[0]
     : currentWindowUrl.split('?')[0];
@@ -855,23 +852,13 @@ export default function App() {
         {/* VIEW 3: LIVE PARTICIPANT SUBMISSION SECTION */}
         {activeSection === 'participate' && (
           <div className="max-w-3xl mx-auto space-y-5 animate-fadeIn">
-            {/* Anonymous & Free Access Guarantee Banner */}
-            <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md">
-              <div className="flex items-start sm:items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                </div>
-                <div>
-                  <h4 className="text-xs sm:text-sm font-bold text-white flex items-center gap-1.5">
-                    <span>Participación 100% Anónima y Sin Cuentas</span>
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-semibold">
-                      Acceso Instantáneo
-                    </span>
-                  </h4>
-                  <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5">
-                    Nuestra aplicación jamás solicita inicio de sesión con Google, contraseñas ni registros. Tu audiencia solo escribe su palabra y presiona Enviar.
-                  </p>
-                </div>
+            {/* Section Header */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <h4 className="text-sm sm:text-base font-bold text-white">Participación en Vivo</h4>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Así es como tu audiencia envía palabras desde su celular o computadora.
+                </p>
               </div>
 
               <button
@@ -956,7 +943,7 @@ export default function App() {
                     className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                   />
                   <p className="text-[11px] text-slate-400">
-                    Si has publicado tu aplicación con el botón <strong>"Share"</strong> de AI Studio o la has desplegado en un dominio propio, puedes pegar esa URL aquí para que el QR apunte directamente a ella sin solicitar cuentas de Google.
+                    Pega aquí una URL personalizada o dominio propio si quieres que el QR apunte directamente a él.
                   </p>
                 </div>
               )}
@@ -1015,22 +1002,6 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Clarification about Google Sign-In in dev containers */}
-                  {isDevHost && !customPublicUrl && (
-                    <div className="p-3 bg-amber-950/40 border border-amber-500/30 rounded-xl text-xs text-amber-200/90 space-y-1">
-                      <div className="flex items-center gap-1.5 font-bold text-amber-300 text-xs">
-                        <Info className="w-3.5 h-3.5 shrink-0" />
-                        <span>¿Por qué Google te pide iniciar sesión al escanear desde el celular?</span>
-                      </div>
-                      <p className="text-[11px] leading-relaxed text-amber-200/80">
-                        Esta ventana está en la <strong>URL privada de desarrollo de AI Studio</strong> (<code className="bg-slate-900 px-1 py-0.5 rounded text-[10px]">ais-dev-...</code>), que Google protege para que solo tú puedas editarla.
-                      </p>
-                      <p className="text-[11px] leading-relaxed text-amber-200/80">
-                        Para que tu audiencia participe <strong>sin ninguna cuenta de Google</strong>, pulsa el botón <strong>"Share" (Compartir)</strong> en la esquina superior de Google AI Studio y comparte ese enlace público. ¡Así cualquier persona entrará instantáneamente!
-                      </p>
-                    </div>
-                  )}
-
                   <div className="flex flex-wrap gap-2 pt-1">
                     <button
                       type="button"
@@ -1084,6 +1055,8 @@ export default function App() {
         config={config}
         sessionTitle={session.title}
         sessionId={sessionId}
+        promptQuestion={session.promptQuestion}
+        logoUrl={session.logoUrl}
       />
 
       {/* Fullscreen Presentation Mode with QR code */}
