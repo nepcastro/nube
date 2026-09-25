@@ -522,9 +522,9 @@ export default function App() {
     return (
       <ParticipantMobileView
         session={session}
+        config={config}
         onSubmitWords={handleSubmitWords}
         onVoteWord={handleVoteWord}
-        onSwitchToStudio={() => setIsParticipantMode(false)}
         isLoading={isLoading}
       />
     );
