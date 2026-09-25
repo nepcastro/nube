@@ -15,7 +15,6 @@ import {
   Eye,
   Edit3,
   HelpCircle,
-  ShieldCheck,
   Globe,
   Settings,
 } from 'lucide-react';
@@ -42,7 +41,6 @@ export const PresentationView: React.FC<PresentationViewProps> = ({
   const [showLanding, setShowLanding] = useState<boolean>(true);
 
   const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-  const isDevHost = currentUrl.includes('ais-dev-');
 
   const [customUrl, setCustomUrl] = useState<string>(() => {
     return typeof window !== 'undefined' ? (localStorage.getItem('wordcloud_public_url') || '') : '';
@@ -266,12 +264,6 @@ export const PresentationView: React.FC<PresentationViewProps> = ({
               </div>
             </div>
 
-            {/* Anonymous Badge */}
-            <div className="mb-2 py-0.5 px-2 bg-emerald-950/60 border border-emerald-500/30 rounded-full flex items-center justify-center gap-1 text-[10px] font-semibold text-emerald-300">
-              <ShieldCheck className="w-3 h-3 text-emerald-400 shrink-0" />
-              <span>Acceso libre y 100% anónimo</span>
-            </div>
-
             {/* Optional URL Config Box */}
             {showUrlConfig && (
               <div className="mb-2.5 p-2.5 bg-slate-950/90 border border-slate-800 rounded-xl text-left space-y-1.5 animate-fadeIn">
@@ -298,9 +290,7 @@ export const PresentationView: React.FC<PresentationViewProps> = ({
                   className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-[10px] text-slate-200 placeholder:text-slate-500 font-mono focus:outline-none focus:border-indigo-500"
                 />
                 <p className="text-[9px] text-slate-400 leading-tight">
-                  {isDevHost
-                    ? '⚠️ Estás en la URL privada de desarrollo. Para acceso sin cuenta de Google, pulsa "Share" en AI Studio y pega el enlace público aquí.'
-                    : 'Pega aquí una URL personalizada o dominio si lo deseas.'}
+                  Pega aquí una URL personalizada o dominio si lo deseas.
                 </p>
               </div>
             )}
@@ -312,19 +302,7 @@ export const PresentationView: React.FC<PresentationViewProps> = ({
                 className="w-full h-auto rounded-lg"
               />
             </div>
-            <p className="text-xs font-bold text-white mb-0.5">¡Escanea para Participar!</p>
-            <p className="text-[10px] sm:text-[11px] text-slate-400 mb-2 leading-tight">
-              Sin registros ni contraseñas. Solo escribe tu palabra.
-            </p>
-
-            {isDevHost && !customUrl && (
-              <div className="mb-2 p-1.5 bg-amber-950/40 border border-amber-500/30 rounded-lg text-[9.5px] text-amber-300 leading-tight text-left flex items-start gap-1">
-                <HelpCircle className="w-3 h-3 text-amber-400 shrink-0 mt-0.5" />
-                <span>
-                  <strong>Tip para la audiencia:</strong> Usa el botón "Share" de AI Studio para obtener el enlace público sin login de Google.
-                </span>
-              </div>
-            )}
+            <p className="text-xs font-bold text-white mb-2">¡Escanea para Participar!</p>
 
             <div className="space-y-1.5">
               <button

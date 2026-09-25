@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import confetti from 'canvas-confetti';
 import { SessionData } from '../types';
-import { Send, Sparkles, User, ThumbsUp, ArrowLeft, ShieldCheck, ArrowRight } from 'lucide-react';
+import { Send, Sparkles, User, ThumbsUp, ArrowLeft, ArrowRight } from 'lucide-react';
 import { BrandLockup } from './BrandLockup';
 
 interface ParticipantMobileViewProps {
@@ -61,11 +61,6 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
         className="min-h-screen w-full bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 flex flex-col items-center justify-center p-6 text-center select-none animate-fadeIn"
       >
         <BrandLockup clientLogoUrl={session.logoUrl} size="lg" className="mb-7" />
-
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/60 border border-emerald-500/40 text-emerald-400 text-[11px] font-semibold mb-4">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Acceso libre · Sin registro ni cuentas</span>
-        </div>
 
         <p className="text-xs sm:text-sm uppercase tracking-[0.2em] text-indigo-400 font-bold mb-3">
           Taller en Vivo
@@ -131,10 +126,6 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 text-xs font-semibold">
               <Sparkles className="w-3.5 h-3.5" />
               <span>{session.title}</span>
-            </div>
-            <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-950/60 border border-emerald-500/40 text-emerald-400 text-[11px] font-semibold">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Acceso libre · Sin registro ni cuentas</span>
             </div>
           </div>
           <h1 className="text-xl font-extrabold text-white leading-snug">

@@ -1,6 +1,14 @@
 import React, { useState } from 'react';
 import { CloudConfig, ExportOption } from '../types';
-import { computeWordCloud, generateSvgString, renderWordCloudToCanvas } from '../services/wordCloudEngine';
+import {
+  computeExportHeaderHeight,
+  computeWordCloud,
+  drawExportHeaderOnCanvas,
+  generateSvgString,
+  renderWordCloudToCanvas,
+  resolveExportHeader,
+} from '../services/wordCloudEngine';
+import { GEN_LOGO_DATA_URL } from '../constants/genBrand';
 import {
   Download,
   Share2,
@@ -25,6 +33,8 @@ interface ExportShareModalProps {
   config: CloudConfig;
   sessionTitle: string;
   sessionId: string;
+  promptQuestion?: string;
+  logoUrl?: string;
 }
 
 const EXPORT_OPTIONS: ExportOption[] = [
@@ -66,6 +76,8 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
   config,
   sessionTitle,
   sessionId,
+  promptQuestion,
+  logoUrl,
 }) => {
   const [selectedResolution, setSelectedResolution] = useState<ExportOption>(EXPORT_OPTIONS[1]);
   const [isExporting, setIsExporting] = useState(false);
@@ -76,7 +88,6 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
 
   const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
   const storedPublicUrl = typeof window !== 'undefined' ? (localStorage.getItem('wordcloud_public_url') || '') : '';
-  const isDevHost = currentUrl.includes('ais-dev-');
   const effectiveBaseUrl = storedPublicUrl.trim()
     ? storedPublicUrl.trim().split('?')[0]
     : currentUrl.split('?')[0];
@@ -89,10 +100,27 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
       const { width, height } = selectedResolution;
       const offscreenCanvas = document.createElement('canvas');
 
-      // Compute word positions for targeted high-resolution dimensions
-      const highResWords = computeWordCloud(words, config, width, height);
+      // Resolve the branding header (Gen logo + client logo + question) so
+      // the exported image is self-explanatory on its own.
+      const resolvedHeader = await resolveExportHeader({
+        title: sessionTitle,
+        promptQuestion,
+        genLogoUrl: GEN_LOGO_DATA_URL,
+        clientLogoUrl: logoUrl,
+      });
+      const headerHeight = resolvedHeader ? computeExportHeaderHeight(height) : 0;
 
-      renderWordCloudToCanvas(offscreenCanvas, highResWords, config, width, height);
+      // Compute word positions within the space left below the header
+      const highResWords = computeWordCloud(words, config, width, height - headerHeight);
+
+      renderWordCloudToCanvas(offscreenCanvas, highResWords, config, width, height, headerHeight);
+
+      if (resolvedHeader) {
+        const ctx = offscreenCanvas.getContext('2d');
+        if (ctx) {
+          await drawExportHeaderOnCanvas(ctx, width, headerHeight, resolvedHeader);
+        }
+      }
 
       offscreenCanvas.toBlob((blob) => {
         if (!blob) return;
@@ -114,12 +142,22 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
   };
 
   // Handle lossless vector SVG export
-  const handleDownloadSvg = () => {
+  const handleDownloadSvg = async () => {
+    setIsExporting(true);
     try {
       const width = selectedResolution.width;
       const height = selectedResolution.height;
-      const highResWords = computeWordCloud(words, config, width, height);
-      const svgString = generateSvgString(highResWords, config, width, height);
+
+      const resolvedHeader = await resolveExportHeader({
+        title: sessionTitle,
+        promptQuestion,
+        genLogoUrl: GEN_LOGO_DATA_URL,
+        clientLogoUrl: logoUrl,
+      });
+      const headerHeight = resolvedHeader ? computeExportHeaderHeight(height) : 0;
+
+      const highResWords = computeWordCloud(words, config, width, height - headerHeight);
+      const svgString = await generateSvgString(highResWords, config, width, height, resolvedHeader, headerHeight);
 
       const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
       const url = URL.createObjectURL(blob);
@@ -133,6 +171,8 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Error al exportar SVG:', err);
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -274,7 +314,8 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
                 type="button"
                 id="download-svg-btn"
                 onClick={handleDownloadSvg}
-                className="w-full sm:w-auto px-4 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white font-semibold rounded-xl text-xs flex items-center justify-center gap-2 transition-all active:scale-95"
+                disabled={isExporting}
+                className="w-full sm:w-auto px-4 py-3 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 border border-slate-600 text-white font-semibold rounded-xl text-xs flex items-center justify-center gap-2 transition-all active:scale-95"
                 title="Descargar en formato vectorial escalable sin pérdida de calidad"
               >
                 <FileCode className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -375,11 +416,6 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
                   <span>{copiedLink ? '¡Copiado!' : 'Copiar Enlace'}</span>
                 </button>
               </div>
-              {isDevHost && !storedPublicUrl && (
-                <p className="text-[10px] text-amber-400/90 mt-1">
-                  💡 <strong>Tip de acceso libre:</strong> Para que los participantes accedan sin que se les pida cuenta de Google, pulsa <strong>Share</strong> (Compartir) en la esquina superior de AI Studio y comparte ese enlace público.
-                </p>
-              )}
             </div>
 
             {/* Embed Code */}
