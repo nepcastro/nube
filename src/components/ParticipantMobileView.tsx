@@ -1,28 +1,30 @@
 import React, { useState } from 'react';
 import confetti from 'canvas-confetti';
-import { SessionData } from '../types';
-import { Send, Sparkles, User, ThumbsUp, ArrowLeft, ArrowRight } from 'lucide-react';
+import { CloudConfig, SessionData } from '../types';
+import { Send, Sparkles, User, ThumbsUp, Eye, ArrowRight, Minimize2 } from 'lucide-react';
 import { BrandLockup } from './BrandLockup';
+import { WordCloudCanvas } from './WordCloudCanvas';
 
 interface ParticipantMobileViewProps {
   session: SessionData;
+  config: CloudConfig;
   onSubmitWords: (words: string[], name: string) => Promise<void>;
   onVoteWord: (word: string) => void;
-  onSwitchToStudio: () => void;
   isLoading?: boolean;
 }
 
 export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
   session,
+  config,
   onSubmitWords,
   onVoteWord,
-  onSwitchToStudio,
   isLoading = false,
 }) => {
   const [wordInput, setWordInput] = useState('');
   const [name, setName] = useState('');
   const [submittedMessage, setSubmittedMessage] = useState<string | null>(null);
   const [showLanding, setShowLanding] = useState<boolean>(true);
+  const [showCloudView, setShowCloudView] = useState<boolean>(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,6 +55,35 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
   const topWords = (Object.entries(session.words) as [string, number][])
     .sort((a, b) => b[1] - a[1])
     .slice(0, 15);
+
+  // Read-only live cloud view — anyone can peek at it, no moderator PIN
+  // involved, and no access to the studio/admin controls.
+  if (showCloudView) {
+    return (
+      <div
+        id="participant-cloud-view"
+        className="fixed inset-0 z-50 bg-slate-950 flex flex-col select-none overflow-hidden"
+      >
+        <header className="px-4 py-3 bg-slate-900/90 border-b border-slate-800/80 backdrop-blur-md flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-indigo-400 font-bold text-xs tracking-wide">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>EN VIVO</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowCloudView(false)}
+            title="Volver a enviar palabras"
+            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-all"
+          >
+            <Minimize2 className="w-4 h-4" />
+          </button>
+        </header>
+        <main className="flex-1 relative w-full h-full p-3 overflow-hidden">
+          <WordCloudCanvas words={session.words} config={config} onWordClick={onVoteWord} isPresentation />
+        </main>
+      </div>
+    );
+  }
 
   if (showLanding) {
     return (
@@ -86,11 +117,11 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
 
         <button
           type="button"
-          onClick={onSwitchToStudio}
+          onClick={() => setShowCloudView(true)}
           className="mt-8 text-xs text-slate-500 hover:text-indigo-400 flex items-center gap-1 font-semibold transition-colors"
         >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Ver Estudio / Nube</span>
+          <Eye className="w-3.5 h-3.5" />
+          <span>Ver Nube</span>
         </button>
       </div>
     );
@@ -112,11 +143,11 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
           </div>
           <button
             type="button"
-            onClick={onSwitchToStudio}
+            onClick={() => setShowCloudView(true)}
             className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-semibold"
           >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Ver Estudio / Nube</span>
+            <Eye className="w-3.5 h-3.5" />
+            <span>Ver Nube</span>
           </button>
         </div>
 
