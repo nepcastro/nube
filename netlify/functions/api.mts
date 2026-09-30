@@ -164,16 +164,20 @@ function withDefaults(session: Partial<SessionData> & { id: string }): SessionDa
   };
 }
 
+// "strong" consistency trades a little latency for guaranteed read-after-write
+// correctness — important here since several participants can submit words
+// within the same second during a live session, and each write reads the
+// latest state before merging its own change into it.
 function getSessionStore() {
-  return getStore("nube-sessions");
+  return getStore({ name: "nube-sessions", consistency: "strong" });
 }
 
 function getLogoStore() {
-  return getStore("nube-logos");
+  return getStore({ name: "nube-logos", consistency: "strong" });
 }
 
 function getIndexStore() {
-  return getStore("nube-index");
+  return getStore({ name: "nube-index", consistency: "strong" });
 }
 
 async function getOrCreateSession(id: string): Promise<SessionData> {
