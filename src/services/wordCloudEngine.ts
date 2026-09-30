@@ -246,6 +246,14 @@ export function computeWordCloud(
   // Identify longest word length to prevent extreme font size overflow
   const longestWordLen = Math.max(4, ...wordsToLayout.map((w) => w.text.length));
 
+  // Once enough words have come in, give the top-ranked words extra visual
+  // weight so the leaders are unmistakably bigger than the rest of the cloud.
+  const RANK_BOOST_MIN_SUBMISSIONS = 5;
+  const RANK_BOOST_TOP_N = 3;
+  const RANK_BOOST_MULTIPLIER = 2;
+  const totalSubmissions = wordsToLayout.reduce((sum, w) => sum + w.count, 0);
+  const rankBoostActive = totalSubmissions >= RANK_BOOST_MIN_SUBMISSIONS;
+
   wordsToLayout.forEach((item, idx) => {
     // Dynamic size scaling based on container dimensions
     const containerFactor = Math.min(width, height) / 760;
@@ -263,14 +271,23 @@ export function computeWordCloud(
       : Math.sqrt((item.count - minCount) / (maxCount - minCount));
 
     const initialFontSize = Math.max(12, Math.round(baseMin + countRatio * (safeMax - baseMin)));
+
+    // Top 3 words get 2x their size once there's enough data to trust the
+    // ranking (5+ words submitted so far), capped so long words still fit.
+    const isTopRanked = idx < RANK_BOOST_TOP_N;
+    const boostCap = Math.max(baseMax, safeMax) * 1.7;
+    const boostedFontSize = rankBoostActive && isTopRanked
+      ? Math.min(boostCap, Math.round(initialFontSize * RANK_BOOST_MULTIPLIER))
+      : initialFontSize;
+
     const initialAngle = getWordAngle(config.rotation, idx);
 
     // Multi-pass placement variants: if initial size doesn't fit, scale down gracefully
     const placementAttempts = [
-      { size: initialFontSize, angle: initialAngle },
-      { size: Math.max(12, Math.round(initialFontSize * 0.82)), angle: initialAngle },
-      { size: Math.max(11, Math.round(initialFontSize * 0.68)), angle: 0 },
-      { size: Math.max(10, Math.round(initialFontSize * 0.52)), angle: 0 },
+      { size: boostedFontSize, angle: initialAngle },
+      { size: Math.max(12, Math.round(boostedFontSize * 0.82)), angle: initialAngle },
+      { size: Math.max(11, Math.round(boostedFontSize * 0.68)), angle: 0 },
+      { size: Math.max(10, Math.round(boostedFontSize * 0.52)), angle: 0 },
     ];
 
     let placed = false;
