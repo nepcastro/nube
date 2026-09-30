@@ -63,10 +63,22 @@ export const CustomizationPanel: React.FC<CustomizationPanelProps> = ({
     onChangeConfig({ ...config, [key]: value });
   };
 
+  // Use this instead of calling `update()` more than once inside the same
+  // handler: each `update()` call reads `config` from the same render's
+  // closure, so a second call would overwrite the first change instead of
+  // combining with it. `updateMany` merges every field into a single
+  // onChangeConfig call so multi-field changes (e.g. palette + background)
+  // land together correctly.
+  const updateMany = (changes: Partial<CloudConfig>) => {
+    onChangeConfig({ ...config, ...changes });
+  };
+
   const addCustomColor = () => {
     if (!config.customColors.includes(customColorInput)) {
-      update('customColors', [...config.customColors, customColorInput]);
-      update('palette', 'custom');
+      updateMany({
+        customColors: [...config.customColors, customColorInput],
+        palette: 'custom',
+      });
     }
   };
 
@@ -229,10 +241,11 @@ export const CustomizationPanel: React.FC<CustomizationPanelProps> = ({
                 type="button"
                 id={`palette-btn-${pal.id}`}
                 onClick={() => {
-                  update('palette', pal.id);
+                  const changes: Partial<CloudConfig> = { palette: pal.id };
                   if (pal.recommendedBg && !config.isTransparentBg) {
-                    update('background', pal.recommendedBg);
+                    changes.background = pal.recommendedBg;
                   }
+                  updateMany(changes);
                 }}
                 className={`p-3 rounded-xl border text-left transition-all ${
                   isSelected
@@ -408,8 +421,11 @@ export const CustomizationPanel: React.FC<CustomizationPanelProps> = ({
                   key={i}
                   type="button"
                   onClick={() => {
-                    update('isTransparentBg', b.transp);
-                    if (!b.transp) update('background', b.bg);
+                    updateMany(
+                      b.transp
+                        ? { isTransparentBg: true }
+                        : { isTransparentBg: false, background: b.bg }
+                    );
                   }}
                   className={`flex-1 min-w-[75px] py-2 px-2.5 rounded-xl border text-xs font-semibold text-center transition-all ${
                     (b.transp && config.isTransparentBg) ||
