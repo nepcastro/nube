@@ -3,12 +3,33 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Generador de Nube de Palabras</title>
+    <title>NUBE · Generador de Nube de Palabras en Vivo</title>
     <meta name="description" content="Generador colaborativo de nubes de palabras con formulario para participantes en vivo, múltiples modelos y paletas, enlace descargable, compartir en redes sociales y exportación en alta resolución." />
-    <meta property="og:title" content="Generador de Nube de Palabras" />
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="32x32" href="data:image/png;base64,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" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#1e1b4b" />
+
+    <!-- Open Graph / WhatsApp / Facebook -->
+    <meta property="og:title" content="NUBE · Generador de Nube de Palabras en Vivo" />
     <meta property="og:description" content="Generador colaborativo de nubes de palabras con formulario para participantes en vivo, múltiples modelos y paletas, enlace descargable, compartir en redes sociales y exportación en alta resolución." />
     <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://nube-nepcastro.netlify.app/" />
+    <meta property="og:image" content="https://nube-nepcastro.netlify.app/og-image.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:site_name" content="NUBE" />
+    <meta property="og:locale" content="es_PE" />
+
+    <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="NUBE · Generador de Nube de Palabras en Vivo" />
+    <meta name="twitter:description" content="Generador colaborativo de nubes de palabras con formulario para participantes en vivo, múltiples modelos y paletas, enlace descargable, compartir en redes sociales y exportación en alta resolución." />
+    <meta name="twitter:image" content="https://nube-nepcastro.netlify.app/og-image.jpg" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Fredoka:wght@600;700&family=Inter:wght@400;500;600;700&family=Montserrat:wght@700;800;900&family=Pacifico&family=Playfair+Display:ital,wght@0,700;1,600&family=Space+Mono:wght@700&display=swap" rel="stylesheet">
