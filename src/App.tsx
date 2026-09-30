@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { CloudConfig, SessionData } from './types';
+import { CloudConfig, ModerationMode, SessionData } from './types';
 import { WordCloudCanvas } from './components/WordCloudCanvas';
 import { ShapeSelectorBar } from './components/ShapeSelectorBar';
 import { CustomizationPanel } from './components/CustomizationPanel';
@@ -10,6 +10,9 @@ import { PresentationView } from './components/PresentationView';
 import { ParticipantMobileView } from './components/ParticipantMobileView';
 import { ActivityQuestionModal } from './components/ActivityQuestionModal';
 import { AdminPinGate } from './components/AdminPinGate';
+import { RaffleModal } from './components/RaffleModal';
+import { SessionsPanel } from './components/SessionsPanel';
+import { getParticipantId } from './utils/participantId';
 import QRCode from 'qrcode';
 import {
   CloudRain,
@@ -30,6 +33,8 @@ import {
   Globe,
   Settings,
   RotateCcw,
+  Dices,
+  FolderClock,
 } from 'lucide-react';
 
 const ADMIN_PIN_STORAGE_KEY = 'nube_moderator_pin';
@@ -90,10 +95,13 @@ export default function App() {
   const [sessionId, setSessionId] = useState<string>('default');
   const [session, setSession] = useState<SessionData>(DEFAULT_SESSION);
   const [config, setConfig] = useState<CloudConfig>(DEFAULT_CONFIG);
-  const [activeSection, setActiveSection] = useState<'cloud' | 'config' | 'participate' | 'words'>('cloud');
+  const [activeSection, setActiveSection] = useState<
+    'cloud' | 'config' | 'participate' | 'words' | 'sessions'
+  >('cloud');
   const [showPresentation, setShowPresentation] = useState<boolean>(false);
   const [showExportModal, setShowExportModal] = useState<boolean>(false);
   const [showQuestionModal, setShowQuestionModal] = useState<boolean>(false);
+  const [showRaffleModal, setShowRaffleModal] = useState<boolean>(false);
   const [isParticipantMode, setIsParticipantMode] = useState<boolean>(false);
   const [isEditingTitle, setIsEditingTitle] = useState<boolean>(false);
   const [editTitleInput, setEditTitleInput] = useState<string>('');
@@ -113,6 +121,7 @@ export default function App() {
   const [adminPin, setAdminPin] = useState<string>('');
   const [isVerifyingPin, setIsVerifyingPin] = useState<boolean>(false);
   const [pinError, setPinError] = useState<string | null>(null);
+  const [participantId] = useState<string>(() => getParticipantId());
 
   const currentWindowUrl = typeof window !== 'undefined' ? window.location.href : '';
   const effectiveBaseUrl = customPublicUrl.trim()
@@ -204,6 +213,44 @@ export default function App() {
     return adminPin ? { 'X-Admin-Pin': adminPin } : {};
   }, [adminPin]);
 
+  // Switch the studio to a different session without a full page reload —
+  // updates the URL so a refresh keeps pointing at the same session.
+  const handleSwitchSession = useCallback((newId: string) => {
+    setSessionId(newId);
+    setActiveSection('cloud');
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      params.set('session', newId);
+      params.delete('mode');
+      window.history.pushState(null, '', `${window.location.pathname}?${params.toString()}`);
+    }
+  }, []);
+
+  // Create a brand-new session (its own QR/link) and switch to it.
+  const handleCreateSession = useCallback(
+    async (title: string, promptQuestion: string): Promise<string | null> => {
+      try {
+        const res = await fetch('/api/sessions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, promptQuestion }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data?.id) {
+          handleSwitchSession(data.id);
+          showToast('¡Nueva sesión creada con éxito!');
+          return data.id as string;
+        }
+        showToast(data?.error || 'No se pudo crear la sesión.');
+        return null;
+      } catch {
+        showToast('No se pudo conectar con el servidor.');
+        return null;
+      }
+    },
+    [handleSwitchSession]
+  );
+
   const handlePinSubmit = async (pin: string) => {
     setIsVerifyingPin(true);
     setPinError(null);
@@ -254,14 +301,30 @@ export default function App() {
     try {
       const res = await fetch(`/api/sessions/${sessionId}/words`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(participantId ? { 'X-Participant-Id': participantId } : {}),
+        },
         body: JSON.stringify({ words: wordsToAdd, participantName }),
       });
+
+      if (res.status === 429) {
+        const data = await res.json().catch(() => ({}));
+        showToast(data?.error || 'Ya alcanzaste el límite de palabras para esta sesión.');
+        return;
+      }
 
       if (res.ok) {
         const data = await res.json();
         if (data.session) {
           setSession(data.session);
+        }
+        if (data.pending?.length > 0) {
+          showToast('Tu palabra quedó pendiente de aprobación del moderador.');
+        } else if (data.blocked?.length > 0 && data.added?.length === 0) {
+          showToast('Esa palabra no está permitida en esta sesión.');
+        } else {
+          showToast('¡Palabra(s) agregadas a la nube con éxito!');
         }
       } else {
         // Fallback local state
@@ -273,8 +336,8 @@ export default function App() {
           }
         });
         setSession({ ...session, words: updated });
+        showToast('¡Palabra(s) agregadas a la nube con éxito!');
       }
-      showToast('¡Palabra(s) agregadas a la nube con éxito!');
     } catch {
       const updated = { ...session.words };
       wordsToAdd.forEach((w) => {
@@ -310,13 +373,26 @@ export default function App() {
     try {
       const res = await fetch(`/api/sessions/${sessionId}/vote`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(participantId ? { 'X-Participant-Id': participantId } : {}),
+        },
         body: JSON.stringify({ word }),
       });
+
+      if (res.status === 429) {
+        const data = await res.json().catch(() => ({}));
+        showToast(data?.error || 'Ya alcanzaste el límite de palabras para esta sesión.');
+        return;
+      }
+
       if (res.ok) {
         const data = await res.json();
         if (data.session) {
           setSession(data.session);
+        }
+        if (data.pending) {
+          showToast('Tu voto por esa palabra nueva quedó pendiente de aprobación.');
         }
       } else {
         setSession({
@@ -474,6 +550,66 @@ export default function App() {
     await handleSaveActivitySettings(editTitleInput, editPromptInput, false);
   };
 
+  // Update the session's custom blocklist (moderation panel)
+  const handleUpdateBlockedWords = async (customBlockedWords: string[]) => {
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
+        body: JSON.stringify({ customBlockedWords }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.session) {
+        setSession(data.session);
+      } else {
+        setSession((prev) => ({ ...prev, customBlockedWords }));
+      }
+    } catch {
+      setSession((prev) => ({ ...prev, customBlockedWords }));
+    }
+  };
+
+  // Switch between auto-approve and review-queue moderation
+  const handleToggleModerationMode = async (moderationMode: ModerationMode) => {
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
+        body: JSON.stringify({ moderationMode }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.session) {
+        setSession(data.session);
+        showToast(
+          moderationMode === 'review'
+            ? 'Las palabras nuevas ahora requieren tu aprobación.'
+            : 'Moderación automática activada.'
+        );
+      } else {
+        setSession((prev) => ({ ...prev, moderationMode }));
+      }
+    } catch {
+      setSession((prev) => ({ ...prev, moderationMode }));
+    }
+  };
+
+  // Approve or reject a word waiting in the review queue
+  const handleResolvePending = async (word: string, action: 'approve' | 'reject') => {
+    try {
+      const res = await fetch(
+        `/api/sessions/${sessionId}/pending/${encodeURIComponent(word)}/${action}`,
+        { method: 'POST', headers: { ...adminHeaders() } }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.session) {
+        setSession(data.session);
+      }
+      showToast(action === 'approve' ? `"${word}" aprobada y visible en la nube.` : `"${word}" rechazada.`);
+    } catch {
+      showToast('No se pudo procesar la palabra pendiente.');
+    }
+  };
+
   // Upload the client/brand logo shown on the presentation landing screen
   const handleUploadLogo = async (file: File) => {
     const dataUrl: string = await new Promise((resolve, reject) => {
@@ -621,6 +757,18 @@ export default function App() {
 
             <button
               type="button"
+              id="open-raffle-btn"
+              onClick={() => setShowRaffleModal(true)}
+              disabled={Object.keys(session.words).length === 0}
+              className="hidden sm:flex px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 border border-slate-700 text-slate-200 hover:text-white text-xs font-semibold items-center gap-1.5 transition-all shadow-sm active:scale-95 shrink-0"
+              title="Sortear una palabra al azar"
+            >
+              <Dices className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
+              <span className="hidden lg:inline">Sorteo</span>
+            </button>
+
+            <button
+              type="button"
               id="open-presentation-btn"
               onClick={() => setShowPresentation(true)}
               className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm active:scale-95 shrink-0"
@@ -656,7 +804,7 @@ export default function App() {
       <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 pt-3 sm:pt-4">
         <nav
           id="main-navigation-sections"
-          className="grid grid-cols-4 gap-1 p-1 bg-slate-900/90 border border-slate-800 rounded-2xl shadow-md"
+          className="grid grid-cols-5 gap-1 p-1 bg-slate-900/90 border border-slate-800 rounded-2xl shadow-md"
         >
           <button
             type="button"
@@ -712,6 +860,20 @@ export default function App() {
           >
             <ListOrdered className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
             <span className="truncate">Moderación</span>
+          </button>
+
+          <button
+            type="button"
+            id="nav-section-sessions"
+            onClick={() => setActiveSection('sessions')}
+            className={`px-1.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+              activeSection === 'sessions'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 ring-1 ring-indigo-400/40'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <FolderClock className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <span className="truncate">Sesiones</span>
           </button>
         </nav>
       </div>
@@ -1037,6 +1199,27 @@ export default function App() {
               onBulkAddWords={handleBulkAddWords}
               onResetWords={handleResetWords}
               onSeedSampleWords={handleSeedSampleWords}
+              customBlockedWords={session.customBlockedWords || []}
+              onUpdateBlockedWords={handleUpdateBlockedWords}
+              moderationMode={session.moderationMode || 'auto'}
+              onToggleModerationMode={handleToggleModerationMode}
+              pendingWords={session.pendingWords || {}}
+              onApprovePending={(word) => handleResolvePending(word, 'approve')}
+              onRejectPending={(word) => handleResolvePending(word, 'reject')}
+              history={session.history || []}
+              onOpenRaffle={() => setShowRaffleModal(true)}
+            />
+          </div>
+        )}
+
+        {/* VIEW 5: SESSIONS PANEL */}
+        {activeSection === 'sessions' && (
+          <div className="animate-fadeIn">
+            <SessionsPanel
+              currentSessionId={sessionId}
+              adminHeaders={adminHeaders}
+              onSwitchSession={handleSwitchSession}
+              onCreateSession={handleCreateSession}
             />
           </div>
         )}
@@ -1057,6 +1240,14 @@ export default function App() {
         sessionId={sessionId}
         promptQuestion={session.promptQuestion}
         logoUrl={session.logoUrl}
+        participantCount={session.participantCount}
+      />
+
+      {/* Raffle / random word draw */}
+      <RaffleModal
+        isOpen={showRaffleModal}
+        onClose={() => setShowRaffleModal(false)}
+        words={session.words}
       />
 
       {/* Fullscreen Presentation Mode with QR code */}

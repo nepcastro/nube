@@ -65,6 +65,16 @@ color: string;
   height: number;
 }
 
+export interface SessionRound {
+  title: string;
+  promptQuestion: string;
+  words: Record<string, number>;
+  participantCount: number;
+  closedAt: number;
+}
+
+export type ModerationMode = 'auto' | 'review';
+
 export interface SessionData {
   id: string;
   title: string;
@@ -75,6 +85,20 @@ export interface SessionData {
   participantCount: number;
   recentLogs: Array<{ word: string; time: number; by?: string }>;
   logoUrl?: string;
+  customBlockedWords?: string[];
+  moderationMode?: ModerationMode;
+  pendingWords?: Record<string, number>;
+  history?: SessionRound[];
+}
+
+export interface SessionIndexEntry {
+  id: string;
+  title: string;
+  promptQuestion: string;
+  createdAt: number;
+  updatedAt: number;
+  participantCount: number;
+  wordCount: number;
 }
 
 export type ExportResolution = 'standard' | 'hd' | '4k' | 'print300';

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { STOP_WORDS } from '../constants/palettes';
+import { ModerationMode, SessionRound } from '../types';
 import {
   Search,
   Trash2,
@@ -9,6 +10,15 @@ import {
   RotateCcw,
   Sparkles,
   Check,
+  ShieldAlert,
+  Ban,
+  X,
+  ThumbsUp,
+  ThumbsDown,
+  History,
+  ChevronDown,
+  ChevronUp,
+  Dices,
 } from 'lucide-react';
 
 interface WordListManagerProps {
@@ -18,6 +28,15 @@ interface WordListManagerProps {
   onBulkAddWords: (wordsMap: Record<string, number>) => void;
   onResetWords: () => void;
   onSeedSampleWords: () => void;
+  customBlockedWords?: string[];
+  onUpdateBlockedWords?: (words: string[]) => void;
+  moderationMode?: ModerationMode;
+  onToggleModerationMode?: (mode: ModerationMode) => void;
+  pendingWords?: Record<string, number>;
+  onApprovePending?: (word: string) => void;
+  onRejectPending?: (word: string) => void;
+  history?: SessionRound[];
+  onOpenRaffle?: () => void;
 }
 
 export const WordListManager: React.FC<WordListManagerProps> = ({
@@ -27,7 +46,18 @@ export const WordListManager: React.FC<WordListManagerProps> = ({
   onBulkAddWords,
   onResetWords,
   onSeedSampleWords,
+  customBlockedWords = [],
+  onUpdateBlockedWords,
+  moderationMode = 'auto',
+  onToggleModerationMode,
+  pendingWords = {},
+  onApprovePending,
+  onRejectPending,
+  history = [],
+  onOpenRaffle,
 }) => {
+  const [newBlockedWord, setNewBlockedWord] = useState('');
+  const [showHistory, setShowHistory] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [bulkText, setBulkText] = useState('');
   const [showBulkModal, setShowBulkModal] = useState(false);
@@ -73,6 +103,27 @@ export const WordListManager: React.FC<WordListManagerProps> = ({
     setShowBulkModal(false);
   };
 
+  const handleAddBlockedWord = (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = newBlockedWord.trim();
+    if (!clean || !onUpdateBlockedWords) return;
+    if (customBlockedWords.some((w) => w.toLowerCase() === clean.toLowerCase())) {
+      setNewBlockedWord('');
+      return;
+    }
+    onUpdateBlockedWords([...customBlockedWords, clean]);
+    setNewBlockedWord('');
+  };
+
+  const handleRemoveBlockedWord = (word: string) => {
+    if (!onUpdateBlockedWords) return;
+    onUpdateBlockedWords(customBlockedWords.filter((w) => w !== word));
+  };
+
+  const pendingEntries = (Object.entries(pendingWords) as [string, number][]).sort(
+    (a, b) => b[1] - a[1]
+  );
+
   return (
     <div
       id="word-list-manager"
@@ -90,6 +141,19 @@ export const WordListManager: React.FC<WordListManagerProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          {onOpenRaffle && (
+            <button
+              type="button"
+              onClick={onOpenRaffle}
+              disabled={Object.keys(words).length === 0}
+              className="px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/25 disabled:opacity-40 border border-amber-500/40 text-amber-300 hover:text-amber-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all"
+              title="Sortear una palabra al azar entre las recibidas"
+            >
+              <Dices className="w-3.5 h-3.5" />
+              <span>Sorteo</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => setShowBulkModal(true)}
@@ -141,6 +205,134 @@ export const WordListManager: React.FC<WordListManagerProps> = ({
           )}
         </div>
       </div>
+
+      {/* Moderation: auto-approve vs. review queue, plus a custom blocklist */}
+      {(onToggleModerationMode || onUpdateBlockedWords) && (
+        <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+              <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+              <span>Moderación de Contenido</span>
+            </span>
+
+            {onToggleModerationMode && (
+              <div className="flex items-center gap-1 p-0.5 bg-slate-900 border border-slate-800 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => onToggleModerationMode('auto')}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                    moderationMode === 'auto'
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Automática
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onToggleModerationMode('review')}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                    moderationMode === 'review'
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Las palabras nuevas esperan tu aprobación antes de mostrarse"
+                >
+                  Con aprobación
+                </button>
+              </div>
+            )}
+          </div>
+
+          {onUpdateBlockedWords && (
+            <div>
+              <p className="text-[11px] text-slate-400 mb-1.5">
+                Palabras bloqueadas para esta sesión (además del filtro general):
+              </p>
+              <form onSubmit={handleAddBlockedWord} className="flex items-center gap-2 mb-2">
+                <input
+                  type="text"
+                  value={newBlockedWord}
+                  onChange={(e) => setNewBlockedWord(e.target.value)}
+                  placeholder="Añadir palabra a bloquear..."
+                  className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <button
+                  type="submit"
+                  disabled={!newBlockedWord.trim()}
+                  className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center gap-1"
+                >
+                  <Ban className="w-3.5 h-3.5" />
+                </button>
+              </form>
+              {customBlockedWords.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {customBlockedWords.map((w) => (
+                    <span
+                      key={w}
+                      className="px-2 py-1 rounded-lg bg-rose-950/40 border border-rose-800/50 text-rose-300 text-[11px] flex items-center gap-1.5"
+                    >
+                      <span>{w}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveBlockedWord(w)}
+                        className="hover:text-white"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Pending words waiting for moderator approval (review mode only) */}
+      {pendingEntries.length > 0 && (onApprovePending || onRejectPending) && (
+        <div className="p-3.5 rounded-xl bg-amber-950/20 border border-amber-800/40 space-y-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
+            <ShieldAlert className="w-3.5 h-3.5" />
+            <span>Pendientes de Aprobación ({pendingEntries.length})</span>
+          </span>
+          <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+            {pendingEntries.map(([word, count]) => (
+              <div
+                key={word}
+                className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-slate-900/60 border border-slate-800 text-xs"
+              >
+                <span className="font-semibold text-white truncate max-w-[140px]">
+                  {word}{' '}
+                  <span className="text-amber-400 font-mono text-[10px]">×{count}</span>
+                </span>
+                <div className="flex items-center gap-1.5">
+                  {onApprovePending && (
+                    <button
+                      type="button"
+                      onClick={() => onApprovePending(word)}
+                      className="p-1 rounded bg-emerald-900/50 hover:bg-emerald-800/60 text-emerald-300 transition-all"
+                      title="Aprobar y mostrar en la nube"
+                    >
+                      <ThumbsUp className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {onRejectPending && (
+                    <button
+                      type="button"
+                      onClick={() => onRejectPending(word)}
+                      className="p-1 rounded bg-rose-900/50 hover:bg-rose-800/60 text-rose-300 transition-all"
+                      title="Rechazar"
+                    >
+                      <ThumbsDown className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Manual Add Single Word */}
       <form onSubmit={handleAddSingle} className="flex items-center gap-2">
@@ -273,6 +465,63 @@ export const WordListManager: React.FC<WordListManagerProps> = ({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Rounds history: snapshots taken automatically each time the
+          facilitator starts a new activity with "lienzo limpio" */}
+      {history.length > 0 && (
+        <div className="pt-2 border-t border-slate-800">
+          <button
+            type="button"
+            onClick={() => setShowHistory((v) => !v)}
+            className="w-full flex items-center justify-between px-1 py-1.5 text-xs font-bold uppercase tracking-wider text-slate-400 hover:text-white transition-colors"
+          >
+            <span className="flex items-center gap-1.5">
+              <History className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Historial de Rondas ({history.length})</span>
+            </span>
+            {showHistory ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+
+          {showHistory && (
+            <div className="mt-2 space-y-2 animate-fadeIn">
+              {history.map((round, idx) => {
+                const topWords = (Object.entries(round.words) as [string, number][])
+                  .sort((a, b) => b[1] - a[1])
+                  .slice(0, 5);
+                return (
+                  <div
+                    key={`${round.closedAt}-${idx}`}
+                    className="p-3 rounded-xl bg-slate-800/40 border border-slate-800 text-xs"
+                  >
+                    <div className="flex items-center justify-between flex-wrap gap-1.5">
+                      <span className="font-bold text-white">{round.title}</span>
+                      <span className="text-[10px] text-slate-500">
+                        {new Date(round.closedAt).toLocaleString('es-PE', {
+                          dateStyle: 'short',
+                          timeStyle: 'short',
+                        })}
+                      </span>
+                    </div>
+                    <p className="text-slate-400 mt-0.5 italic">"{round.promptQuestion}"</p>
+                    {topWords.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {topWords.map(([w, c]) => (
+                          <span
+                            key={w}
+                            className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700/60 text-slate-300 text-[10px] font-mono"
+                          >
+                            {w} · {c}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>

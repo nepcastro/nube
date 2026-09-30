@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { CloudConfig, ExportOption } from '../types';
+import { jsPDF } from 'jspdf';
 import {
   computeExportHeaderHeight,
   computeWordCloud,
@@ -20,6 +21,7 @@ import {
   Send,
   FileCode,
   FileSpreadsheet,
+  FileBarChart,
   X,
   Printer,
   Monitor,
@@ -35,6 +37,7 @@ interface ExportShareModalProps {
   sessionId: string;
   promptQuestion?: string;
   logoUrl?: string;
+  participantCount?: number;
 }
 
 const EXPORT_OPTIONS: ExportOption[] = [
@@ -78,9 +81,11 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
   sessionId,
   promptQuestion,
   logoUrl,
+  participantCount = 0,
 }) => {
   const [selectedResolution, setSelectedResolution] = useState<ExportOption>(EXPORT_OPTIONS[1]);
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedEmbed, setCopiedEmbed] = useState(false);
 
@@ -195,6 +200,100 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  // Build a one-page closing report: the final cloud image plus engagement
+  // metrics, ready to attach as evidence in a client-facing deliverable.
+  const handleDownloadPdfReport = async () => {
+    setIsExportingPdf(true);
+    try {
+      const imgWidth = 1600;
+      const imgHeight = 1000;
+      const offscreenCanvas = document.createElement('canvas');
+
+      const resolvedHeader = await resolveExportHeader({
+        title: sessionTitle,
+        promptQuestion,
+        genLogoUrl: GEN_LOGO_DATA_URL,
+        clientLogoUrl: logoUrl,
+      });
+      const headerHeight = resolvedHeader ? computeExportHeaderHeight(imgHeight) : 0;
+      const highResWords = computeWordCloud(words, config, imgWidth, imgHeight - headerHeight);
+      renderWordCloudToCanvas(offscreenCanvas, highResWords, config, imgWidth, imgHeight, headerHeight);
+      if (resolvedHeader) {
+        const ctx = offscreenCanvas.getContext('2d');
+        if (ctx) await drawExportHeaderOnCanvas(ctx, imgWidth, headerHeight, resolvedHeader);
+      }
+      const imgDataUrl = offscreenCanvas.toDataURL('image/png');
+
+      const totalVotes = (Object.values(words) as number[]).reduce((a, b) => a + b, 0);
+      const uniqueWords = Object.keys(words).length;
+      const topWords = (Object.entries(words) as [string, number][])
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5);
+
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 36;
+
+      // Header text
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(30, 27, 75);
+      doc.text(sessionTitle, margin, margin + 10);
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(90, 90, 110);
+      const dateLabel = new Date().toLocaleDateString('es-PE', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+      doc.text(`Reporte de cierre · ${dateLabel}`, margin, margin + 26);
+      if (promptQuestion) {
+        doc.text(`Pregunta: "${promptQuestion}"`, margin, margin + 40);
+      }
+
+      // Cloud image, scaled to fit
+      const imgAreaTop = margin + 54;
+      const imgAreaWidth = pageWidth - margin * 2;
+      const imgAreaHeight = pageHeight - imgAreaTop - 70;
+      const scale = Math.min(imgAreaWidth / imgWidth, imgAreaHeight / imgHeight);
+      const drawW = imgWidth * scale;
+      const drawH = imgHeight * scale;
+      const drawX = margin + (imgAreaWidth - drawW) / 2;
+      doc.addImage(imgDataUrl, 'PNG', drawX, imgAreaTop, drawW, drawH);
+
+      // Metrics footer
+      const metricsY = imgAreaTop + drawH + 22;
+      doc.setFontSize(9.5);
+      doc.setTextColor(60, 60, 75);
+      doc.setFont('helvetica', 'bold');
+      const metrics = [
+        `${participantCount} participaciones`,
+        `${uniqueWords} palabras únicas`,
+        `${totalVotes} votos totales`,
+      ];
+      doc.text(metrics.join('   ·   '), margin, metricsY);
+
+      if (topWords.length > 0) {
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(90, 90, 110);
+        const topLine = `Top ${topWords.length}: ${topWords
+          .map(([w, c]) => `${w} (${c})`)
+          .join(', ')}`;
+        doc.text(topLine, margin, metricsY + 16);
+      }
+
+      const sanitizedTitle = sessionTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      doc.save(`reporte_${sanitizedTitle}.pdf`);
+    } catch (err) {
+      console.error('Error al generar el reporte PDF:', err);
+    } finally {
+      setIsExportingPdf(false);
+    }
   };
 
   const copyToClipboard = (text: string, setCopied: (v: boolean) => void) => {
@@ -330,6 +429,18 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
               >
                 <FileSpreadsheet className="w-4 h-4 text-cyan-400 shrink-0" />
                 <span>Datos JSON</span>
+              </button>
+
+              <button
+                type="button"
+                id="download-pdf-report-btn"
+                onClick={handleDownloadPdfReport}
+                disabled={isExportingPdf}
+                className="w-full sm:w-auto px-3.5 py-3 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 border border-slate-700 text-slate-300 hover:text-white font-medium rounded-xl text-xs flex items-center justify-center gap-2 transition-all active:scale-95"
+                title="Generar un reporte de cierre en PDF con la nube y las métricas de la sesión"
+              >
+                <FileBarChart className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>{isExportingPdf ? 'Generando...' : 'Reporte PDF'}</span>
               </button>
             </div>
           </div>
